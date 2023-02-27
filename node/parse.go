@@ -1,7 +1,6 @@
 package node
 
 import (
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math"
@@ -65,11 +64,4 @@ func Wei2Float(Amount *big.Int, decimals int) float64 {
 	Float := new(big.Float).Quo(Big, big.NewFloat(math.Pow10(decimals)))
 	Float64, _ := Float.Float64()
 	return Float64
-}
-
-func CheckTransactionDest(tx *types.Transaction) bool {
-	var UniswapV2Address = common.HexToAddress("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
-	var UniswapV3Address = common.HexToAddress("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-
-	return tx.To() == &UniswapV2Address || tx.To() == &UniswapV3Address
 }
