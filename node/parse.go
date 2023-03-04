@@ -2,7 +2,10 @@ package node
 
 import (
 	"../uniswapV2"
+	"../uniswapV3"
+	"bytes"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math"
@@ -39,19 +42,32 @@ func TxToSimple(Tx *types.Transaction) (Simple SimpleTx) {
 
 	// Récupère l'adresse du destinataire de la transaction et check s'il s'agit d'un contract Uniswap v2/v3
 	if Tx.To() != nil {
-		Simple.To = Tx.To().String()
-		if Simple.To == "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" {
+
+		switch Simple.To {
+
+		case "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D":
 			Simple.To = "Uniswap v2 Router Contract"
 			// Décode l'input data de la Transaction si l'adresse est le Router Contract Uniswap v2
-			name, args, err := uniswapV2.DecodeTransactionInput(hexutil.Encode(Tx.Data()), uniswapV2.LoadUniswapV2ABI())
+			name, args, err := DecodeTransactionInput(hexutil.Encode(Tx.Data()), uniswapV2.LoadUniswapV2ABI())
 			if err == nil {
 				Simple.Input = fmt.Sprintf("%s(%v)", name, args)
 			} else {
 				Simple.Input = fmt.Sprintf("Invalid input data: %v", err)
 			}
-		} else if Simple.To == "0xE592427A0AEce92De3Edee1F18E0157C05861564" {
+
+		case "0xE592427A0AEce92De3Edee1F18E0157C05861564":
 			Simple.To = "Uniswap v3 Router Contract"
+			name, args, err := DecodeTransactionInput(hexutil.Encode(Tx.Data()), uniswapV3.LoadUniswapV3ABI())
+			if err == nil {
+				Simple.Input = fmt.Sprintf("%s(%v)", name, args)
+			} else {
+				Simple.Input = fmt.Sprintf("Invalid input data: %v", err)
+			}
+
+		default:
+			Simple.To = Tx.To().String()
 		}
+
 	} else {
 		// Si l'adresse est nulle, cela signifie que la transaction crée un contrat
 		Simple.To = "Contract creation"
@@ -71,4 +87,24 @@ func Wei2Float(Amount *big.Int, decimals int) float64 {
 	Float := new(big.Float).Quo(Big, big.NewFloat(math.Pow10(decimals)))
 	Float64, _ := Float.Float64()
 	return Float64
+}
+
+func DecodeTransactionInput(input string, abiContract abi.ABI) (string, []interface{}, error) {
+
+	parsed, err := hexutil.Decode(input)
+	if err != nil {
+		return "", nil, err
+	}
+
+	for name, method := range abiContract.Methods {
+		if bytes.HasPrefix(parsed, method.ID) {
+			args, err := method.Inputs.UnpackValues(parsed[len(method.ID):])
+			if err != nil {
+				return "", nil, err
+			}
+			return name, args, nil
+		}
+	}
+
+	return "", nil, fmt.Errorf("unknown method ID: %x", parsed[:4])
 }

@@ -1,11 +1,8 @@
 package uniswapV2
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"log"
 	"os"
 )
@@ -25,24 +22,4 @@ func LoadUniswapV2ABI() abi.ABI {
 	}
 
 	return AbiUniswapV2Router
-}
-
-func DecodeTransactionInput(input string, abiContract abi.ABI) (string, []interface{}, error) {
-
-	parsed, err := hexutil.Decode(input)
-	if err != nil {
-		return "", nil, err
-	}
-
-	for name, method := range abiContract.Methods {
-		if bytes.HasPrefix(parsed, method.ID) {
-			args, err := method.Inputs.UnpackValues(parsed[len(method.ID):])
-			if err != nil {
-				return "", nil, err
-			}
-			return name, args, nil
-		}
-	}
-
-	return "", nil, fmt.Errorf("unknown method ID: %x", parsed[:4])
 }
