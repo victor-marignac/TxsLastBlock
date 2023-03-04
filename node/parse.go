@@ -1,7 +1,8 @@
 package node
 
 import (
-	"github.com/ethereum/go-ethereum/common"
+	"../uniswapV2"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math"
@@ -32,7 +33,6 @@ func TxToSimple(Tx *types.Transaction) (Simple SimpleTx) {
 
 	// Convertit la valeur de la transaction en Ether
 	Simple.Value = Wei2Float(Tx.Value(), 18)
-
 	// Récupère l'adresse de l'expéditeur de la transaction
 	From, _ := types.Sender(types.NewLondonSigner(Tx.ChainId()), Tx)
 	Simple.From = From.String()
@@ -42,17 +42,23 @@ func TxToSimple(Tx *types.Transaction) (Simple SimpleTx) {
 		Simple.To = Tx.To().String()
 		if Simple.To == "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D" {
 			Simple.To = "Uniswap v2 Router Contract"
+			// Décode l'input data de la Transaction si l'adresse est le Router Contract Uniswap v2
+			name, args, err := uniswapV2.DecodeTransactionInput(hexutil.Encode(Tx.Data()), uniswapV2.LoadUniswapV2ABI())
+			if err == nil {
+				Simple.Input = fmt.Sprintf("%s(%v)", name, args)
+			} else {
+				Simple.Input = fmt.Sprintf("Invalid input data: %v", err)
+			}
 		} else if Simple.To == "0xE592427A0AEce92De3Edee1F18E0157C05861564" {
 			Simple.To = "Uniswap v3 Router Contract"
 		}
-
 	} else {
 		// Si l'adresse est nulle, cela signifie que la transaction crée un contrat
 		Simple.To = "Contract creation"
 	}
 
-	// Récupère l'input data de la Transaction
 	Simple.Input = hexutil.Encode(Tx.Data())
+
 	return
 }
 
@@ -65,11 +71,4 @@ func Wei2Float(Amount *big.Int, decimals int) float64 {
 	Float := new(big.Float).Quo(Big, big.NewFloat(math.Pow10(decimals)))
 	Float64, _ := Float.Float64()
 	return Float64
-}
-
-func CheckTransactionDest(tx *types.Transaction) bool {
-	var UniswapV2Address = common.HexToAddress("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")
-	var UniswapV3Address = common.HexToAddress("0xE592427A0AEce92De3Edee1F18E0157C05861564")
-
-	return tx.To() == &UniswapV2Address || tx.To() == &UniswapV3Address
 }
