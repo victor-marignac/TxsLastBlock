@@ -42,6 +42,7 @@ func TxToSimple(Tx *types.Transaction) (Simple SimpleTx) {
 
 	// Récupère l'adresse du destinataire de la transaction et check s'il s'agit d'un contract Uniswap v2/v3
 	if Tx.To() != nil {
+		Simple.To = Tx.To().String()
 
 		switch Simple.To {
 
@@ -57,6 +58,7 @@ func TxToSimple(Tx *types.Transaction) (Simple SimpleTx) {
 
 		case "0xE592427A0AEce92De3Edee1F18E0157C05861564":
 			Simple.To = "Uniswap v3 Router Contract"
+			// Décode l'input data de la Transaction si l'adresse est le Router Contract Uniswap v3
 			name, args, err := DecodeTransactionInput(hexutil.Encode(Tx.Data()), uniswapV3.LoadUniswapV3ABI())
 			if err == nil {
 				Simple.Input = fmt.Sprintf("%s(%v)", name, args)
@@ -65,15 +67,13 @@ func TxToSimple(Tx *types.Transaction) (Simple SimpleTx) {
 			}
 
 		default:
-			Simple.To = Tx.To().String()
+			Simple.Input = hexutil.Encode(Tx.Data())
 		}
 
 	} else {
 		// Si l'adresse est nulle, cela signifie que la transaction crée un contrat
 		Simple.To = "Contract creation"
 	}
-
-	Simple.Input = hexutil.Encode(Tx.Data())
 
 	return
 }
@@ -102,6 +102,7 @@ func DecodeTransactionInput(input string, abiContract abi.ABI) (string, []interf
 			if err != nil {
 				return "", nil, err
 			}
+
 			return name, args, nil
 		}
 	}
