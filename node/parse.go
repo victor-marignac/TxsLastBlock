@@ -204,6 +204,9 @@ func parseTransaction(Method abi.Method, Input []interface{}, Tx *types.Transact
 				break
 			}
 		}
+
+	default:
+		Result.Name = "Unsupported Method"
 	}
 	return
 }
