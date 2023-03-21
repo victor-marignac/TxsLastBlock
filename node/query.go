@@ -13,24 +13,16 @@ import (
 	"strings"
 )
 
-// SubscribeNewBlock souscrit à la notification de nouveau bloc
-// La fonction prend un objet de type ethclient.Client en entrée et retourne un canal (Feed) qui
-// permet de recevoir les informations sur les nouveaux blocs
-// Si la souscription échoue, la fonction retourne une erreur
+// SubscribeNewBlock permet de recevoir les informations sur les nouveaux blocs
 func SubscribeNewBlock(Client *ethclient.Client) (Feed chan *types.Header, err error) {
-	// Crée un canal avec une capacité de 2 éléments
 	Feed = make(chan *types.Header, 2)
-	// Souscrit à la notification de nouveau bloc en utilisant la méthode "SubscribeNewHead()"
 	_, err = Client.SubscribeNewHead(context.Background(), Feed)
 	return
 }
 
 // GetBlockTxs retourne les transactions associées à un bloc donné
-// La fonction prend un objet de type ethclient.Client et le numéro de bloc en entrée
-// Elle retourne une liste de transactions et une erreur s'il y a lieu
 func GetBlockTxs(Client *ethclient.Client, BlockNumber *big.Int) (Txs []*types.Transaction, err error) {
 	var Block *types.Block
-	// Récupère le bloc en utilisant la méthode "BlockByNumber()"
 	Block, err = Client.BlockByNumber(context.Background(), BlockNumber)
 	if err != nil {
 		return
@@ -40,28 +32,33 @@ func GetBlockTxs(Client *ethclient.Client, BlockNumber *big.Int) (Txs []*types.T
 	return
 }
 
-func GetMinMaxAmount(ProtocolType string, Tx *types.Transaction) (Result MinMaxResult) {
+func DecodeInputData(ProtocolType string, Tx *types.Transaction) (DecodedInputData DecodedInputDataStruct) {
 	// Extraire le premier octet des données de transaction pour obtenir l'identifiant de méthode
 	HexMethod := Tx.Data()[:4]
+
 	// Extraire les données de transaction restantes
 	HexData := Tx.Data()[4:]
+
 	// Obtenir l'ABI (Application Binary Interface) du protocole Uniswap correspondant
 	ABI, err := abiFromProtocolType(ProtocolType)
 	if err != nil {
 		return
 	}
+
 	// Obtenir la méthode et les arguments correspondants à l'identifiant de méthode
 	Method, Args, err := getMethodAndArgs(ABI, HexMethod)
 	if err != nil {
 		return
 	}
+
 	// Décompresser les données de transaction à l'aide des arguments correspondants pour obtenir les paramètres de méthode
 	Input, err := Args.Unpack(HexData)
 	if err != nil {
 		return
 	}
+
 	// Analyser les paramètres de méthode et extraire les informations minimales et maximales pour l'échange
-	Result = parseTransaction(*Method, Input, Tx, ABI)
+	DecodedInputData = ParseInputDataTransaction(*Method, Input, Tx)
 	return
 }
 
@@ -82,6 +79,7 @@ func getMethodAndArgs(ABI abi.ABI, HexMethod []byte) (*abi.Method, abi.Arguments
 	if err != nil {
 		return nil, nil, err
 	}
+
 	Args := ABI.Methods[Method.Name].Inputs
 	return Method, Args, nil
 }

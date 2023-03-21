@@ -3,7 +3,6 @@ package main
 import (
 	"./config"
 	"./node"
-	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -26,29 +25,36 @@ func main() {
 		return
 	}
 
-	ReadNewBlocks(Sub)
+	TxsFeed := ReadNewBlocks(Sub)
+	DecodedTxsFeed := make(chan node.DecodedTxStruct, 500)
+	go node.TxDecoder(TxsFeed, DecodedTxsFeed, Client)
+
+	select {}
 }
 
-func ReadNewBlocks(Sub chan *types.Header) {
-	for {
-		NewBlock := <-Sub
-		Txs, err := node.GetBlockTxs(Client, NewBlock.Number)
-		if err != nil {
-			log.Println("Unable to get txs for block", NewBlock.Number.Int64(), ":", err)
-			continue
-		}
-		log.Println(len(Txs), "txs in block", NewBlock.Number.Int64(), ":")
-		for Index, Tx := range Txs {
-			SimpleTx := node.TxToSimple(Tx)
-			RawJson, err := json.Marshal(SimpleTx)
+func ReadNewBlocks(Sub chan *types.Header) (TxsFeed chan *types.Transaction) {
+	TxsFeed = make(chan *types.Transaction, 500)
+	Reader := func(Feed chan *types.Transaction) {
+		for {
+			NewBlock := <-Sub
+			Txs, err := node.GetBlockTxs(Client, NewBlock.Number)
 			if err != nil {
-				log.Println("Unable to marshal", Tx.Hash().String())
+				log.Println("Unable to get txs for block", NewBlock.Number.Int64(), ":", err)
 				continue
 			}
-			log.Println("Tx", Index+1, ":", string(RawJson))
-			println("\n")
+			log.Println(len(Txs), "txs in block", NewBlock.Number.Int64(), ":")
+			for _, Tx := range Txs {
+				select {
+				case Feed <- Tx:
+					//log.Println("Tx sent to TxsFeed")
+				default:
+					log.Println("Tx not sent to TxsFeed")
+				}
+			}
 		}
 	}
+	go Reader(TxsFeed)
+	return
 }
 
 func Init() (err error) {
