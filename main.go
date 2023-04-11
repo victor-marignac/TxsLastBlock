@@ -3,7 +3,10 @@ package main
 import (
 	"./config"
 	"./node"
+	"context"
 	"fmt"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
@@ -67,9 +70,9 @@ func Shutdown() {
 	// whatever..
 }
 
-func ReadNewBlocks(Sub chan *types.Header) (TxsFeed chan *types.Transaction) {
-	TxsFeed = make(chan *types.Transaction, 500)
-	Reader := func(Feed chan *types.Transaction) {
+func ReadNewBlocks(Sub chan *types.Header) chan node.LocalTx {
+	var TxsFeed = make(chan node.LocalTx, 1000)
+	Reader := func(Feed chan node.LocalTx) {
 		for {
 			NewBlock := <-Sub
 			Txs, err := node.GetBlockTxs(Client, NewBlock.Number)
@@ -77,10 +80,30 @@ func ReadNewBlocks(Sub chan *types.Header) (TxsFeed chan *types.Transaction) {
 				log.Println("Unable to get txs for block", NewBlock.Number.Int64(), ":", err)
 				continue
 			}
-			log.Println(len(Txs), "txs in block", NewBlock.Number.Int64(), ":")
+			Logs, err := Client.FilterLogs(context.Background(), ethereum.FilterQuery{FromBlock: NewBlock.Number, ToBlock: NewBlock.Number})
+			if err != nil {
+				log.Println("Unable to get logs for block", NewBlock.Number.Int64(), ":", err)
+				continue
+			} else if len(Logs) == 0 {
+				log.Println("Empty logs for block", NewBlock.Number.Int64())
+			}
+			log.Println(len(Txs), "txs in block", NewBlock.Number.Int64(), "(", len(Logs), "events )")
+			var LogsByTxs = make(map[common.Hash][]*types.Log)
+			for _, l := range Logs {
+				Log := l
+				LogsByTxs[Log.TxHash] = append(LogsByTxs[Log.TxHash], &Log)
+			}
 			for _, Tx := range Txs {
+				NewTx, err := node.TxToLocalTx(Tx, LogsByTxs[Tx.Hash()])
+				if err != nil {
+					log.Println("ParseInputData() error:", err, "(", NewTx.Hash, ")")
+					continue
+				}
+				if len(NewTx.Logs) == 0 {
+					continue
+				}
 				select {
-				case Feed <- Tx:
+				case Feed <- NewTx:
 					//log.Println("Tx sent to TxsFeed")
 				default:
 					log.Println("Tx not sent to TxsFeed")
@@ -89,7 +112,7 @@ func ReadNewBlocks(Sub chan *types.Header) (TxsFeed chan *types.Transaction) {
 		}
 	}
 	go Reader(TxsFeed)
-	return
+	return TxsFeed
 }
 
 func Init() (err error) {
