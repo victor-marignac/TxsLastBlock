@@ -8,9 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"math"
 	"math/big"
-	"strings"
 )
 
 // SubscribeNewBlock permet de recevoir les informations sur les nouveaux blocs

@@ -1,197 +1,232 @@
 package node
 
 import (
-	"context"
-	"encoding/json"
+	"../config"
+	"../uniswapV2/pool"
+	"../uniswapV2/router"
+	"../uniswapV3"
+	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"log"
 	"math/big"
+	"strings"
 )
 
-// Fais la routine qui recevra les DecodedTxs pour les traiter (FAIRE LE MEEEV)
-type DecodedTxStruct struct {
-	Tx      SimpleTxStruct  `json:"Tx basic infos"`
-	Receipt TxReceiptStruct `json:"Tx receipt"`
-	Events  Event           `json:"Tx Events"`  // Ce qu'il s'est passé, depuis les logs du receipt
-	Queries Query           `json:"Tx Queries"` // Ce que la tx a voulu faire, depuis l'input data
-}
-
-type Query struct {
-	Protocol  string  `json:"Protocol"`  // Uniswap v2
-	Contract  string  `json:"Contract"`  // L'adresse du contrat du routeur Uniswap v2
-	Type      string  `json:"Type"`      // SwapAmountIn / SwapAmountOut
-	TokenIn   string  `json:"TokenIn"`   // Le token in
-	TokenOut  string  `json:"TokenOut"`  // Le token out
-	AmountIn  float64 `json:"AmountIn"`  // Amount In/Out
-	AmountOut float64 `json:"AmountOut"` // Amount In/Out
-	MinMax    float64 `json:"MinMax"`    // Montant Max/Min
-}
-
-type Event struct {
-	Protocol  string  `json:"Protocol"`  // Uniswap v2
-	Contract  string  `json:"Contract"`  // L'adresse du contrat du routeur Uniswap v2
-	Type      string  `json:"Type"`      // Swap
-	Pool      string  `json:"Pool"`      // L'adresse du pool
-	TokenIn   string  `json:"TokenIn"`   // Le token in
-	TokenOut  string  `json:"TokenOut"`  // Le token out
-	AmountIn  float64 `json:"AmountIn"`  // Le montant qui est arrivé dans le pool
-	AmountOut float64 `json:"AmountOut"` // Le montant qui est sorti du pool
-}
-
-// SimpleTxStruct est une structure d'une transaction
-type SimpleTxStruct struct {
-	Hash             string                 `json:"hash"`
-	Value            float64                `json:"value"`
-	From             string                 `json:"from"`
-	To               string                 `json:"to"`
-	Input            string                 `json:"InputData"`
-	DecodedInputData DecodedInputDataStruct `json:"DecodedInputData"`
-}
-
-type DecodedInputDataStruct struct {
-	Name         string
-	ExactIn      bool
-	Amount       *big.Int
-	MinMaxAmount *big.Int
-	TokenIn      string
-	TokenOut     string
-}
-
-type TxReceiptStruct struct {
-	CumulativeGasUsed uint64       `json:"Cumulative Gas Used: "`
-	GasUsed           uint64       `json:"Gas Used: "`
-	ContractAddress   string       `json:"Contract Address: "`
-	Logs              []*types.Log `json:"Logs: "`
-	Status            bool         `json:"Status: "`
-}
-
-func TxDecoder(TxsFeed chan *types.Transaction, DecodedTxsFeed chan DecodedTxStruct, Client *ethclient.Client) {
-
-	// fonction anonyme dans une routine pour print le json de decodedstruct
+func TxDecoder(TxsFeed chan LocalTx, DecodedTxsFeed chan DecodedTx) {
+	// fonction anonyme dans une routine pour print le log de DecodedTx
 	go func() {
-		for decodedTx := range DecodedTxsFeed {
-			RawJson, err := json.Marshal(decodedTx)
-			if err != nil {
-				log.Println("Unable to marshal")
-				continue
+		for {
+			if Tx, Closed := <-DecodedTxsFeed; !Closed {
+				log.Println("Channel closed (DecodedTxsFeed)")
+			} else if len(Tx.Events) != 0 && len(Tx.Query.Protocol) != 0 {
+				Tx.Log()
 			}
-			log.Println("Tx :", string(RawJson))
-			println("\n")
 		}
 	}()
 
 	// Cette boucle va écrire une DecodedTx dans un channel DecodedTxsFeed
-	for Tx := range TxsFeed {
+	for {
+		if Tx, Closed := <-TxsFeed; !Closed {
+			log.Println("Channel closed (TxsFeed)")
+			break
+		} else {
+			var NewTx DecodedTx
+			NewTx.Tx = Tx
 
-		ThisTx := TxToSimpleStruct(Tx)
-		ThisReceipt := ParseReceipt(Client, Tx)
-		//ThisEvents := ParseEventsFromReceipt(ThisReceipt, "UniswapV2")
-		//ThisQueries := ParseQueriesFromDecodedInputData(ThisTx.DecodedInputData)
+			err := NewTx.ParseInputData()
+			if err != nil {
+				log.Println("ParseInputData() error:", err, "(", NewTx.Tx.Hash, ")")
+			}
+			NewTx.ParseReceipt()
 
-		DecodedTx := DecodedTxStruct{
-			Tx:      ThisTx,
-			Receipt: ThisReceipt,
-			//Events:  ThisEvents,
-			//Queries: ThisQueries,
+			// Envoyez la structure DecodedTx au canal DecodedTxsFeed
+			DecodedTxsFeed <- NewTx
 		}
-
-		// Envoyez la structure DecodedTx au canal DecodedTxsFeed
-		DecodedTxsFeed <- DecodedTx
 	}
 }
 
-// TxToSimpleStruct prend un objet de type Transaction et retourne un objet de type SimpleTx
-func TxToSimpleStruct(Tx *types.Transaction) (Simple SimpleTxStruct) {
-	// Convertit l'identificateur de transaction en chaîne de caractères
-	Simple.Hash = Tx.Hash().String()
-
-	// Convertit la valeur de la transaction en Ether
-	Simple.Value = Wei2Float(Tx.Value(), 18)
-
-	// Récupère l'adresse de l'émetteur de la transaction
+func TxToLocalTx(Tx *types.Transaction, Logs []*types.Log) (NewTx LocalTx, err error) {
+	NewTx.Hash = Tx.Hash().String()
+	NewTx.Value = toFloat(Tx.Value(), 18)
 	From, _ := types.Sender(types.NewLondonSigner(Tx.ChainId()), Tx)
-	Simple.From = From.String()
-
-	// Récupère l'adresse du destinataire de la transaction et check s'il s'agit d'un contract Uniswap v2/v3
+	NewTx.From = From.String()
+	NewTx.Nonce = Tx.Nonce()
+	NewTx.GasLimit = Tx.Gas()
 	if Tx.To() != nil {
-		Simple.To = Tx.To().String()
-
-		switch Simple.To {
-
-		case "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D":
-			Simple.DecodedInputData = DecodeInputData("UniswapV2", Tx)
-
-		case "0xE592427A0AEce92De3Edee1F18E0157C05861564":
-			Simple.DecodedInputData = DecodeInputData("UniswapV3", Tx)
-		default:
-			Simple.Input = hexutil.Encode(Tx.Data())
-		}
-
+		NewTx.To = Tx.To().String()
 	} else {
 		// Si l'adresse est nulle, cela signifie que la transaction crée un contrat
-		Simple.To = "Contract creation"
+		NewTx.To = "Contract creation"
 	}
-
+	/*NewTx.Tx.GasUsed = receipt.GasUsed
+	NewTx.Tx.ContractAddress = receipt.ContractAddress.Hex()*/
+	NewTx.Logs = Logs
+	/*NewTx.Tx.Revert = receipt.Status != types.ReceiptStatusSuccessful*/
+	//NewTx.Index =
+	NewTx.RawTx = *Tx
 	return
 }
 
-func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types.Transaction) (Result DecodedInputDataStruct) {
+func (Tx *DecodedTx) ParseInputData() (err error) {
+	var ProtocolType string
+	switch Tx.Tx.To {
+	case config.UniswapV2ContractRouter:
+		ProtocolType = "UniswapV2Router"
+	case config.UniswapV3ContractRouter:
+		ProtocolType = "UniswapV3Router"
+	default:
+
+	}
+	if len(ProtocolType) != 0 {
+		var Result QueryData
+		if Result, err = DecodeInputData(ProtocolType, &Tx.Tx.RawTx); err == nil {
+			Tx.Query = Result
+		}
+	}
+	return
+}
+
+func (Tx *DecodedTx) ParseReceipt() {
+	ABI, err := abiFromProtocolType("UniswapV2Pool")
+	if err != nil {
+		log.Fatalf("Erreur lors de la création de l'ABI: %v", err)
+	}
+
+	for _, l := range Tx.Tx.Logs {
+		var SwapEvent pool.PoolSwap
+		// Amount0In = Token 0 In
+		// Amount1In = Token 1 In
+		// Amount0Out = Token 0 Out
+		// Amount1Out = Token 1 Out
+		// Token 0 = WETH
+		// Token 1 = USDC
+		// Si Amount0In = 1, Amount1In = 0, Amount0Out = 0, Amount1Out=1700
+		// Ca veut dire que c'est un trade de 1 WETH -> 1700 USDC
+		// Si Amount0In = 0, Amount1In = 1700, Amount0Out = 1, Amount1Out=0
+		// Ca veut dire que c'est un trade de 1700 USDC -> 1 WETH
+		switch l.Topics[0].Hex() {
+		case config.UniswapV2EventSwap:
+			err = ABI.UnpackIntoInterface(&SwapEvent, "swap", l.Data)
+			if err != nil {
+				log.Printf("Erreur lors de l'extraction des données de l'événement Swap: %v", err)
+				continue
+			}
+			Tx.Events = append(Tx.Events, Event{
+				Protocol: "Uniswap V2",
+				Contract: Tx.Tx.To,
+				Type:     "Swap",
+				Pool:     l.Address.String(),
+				TokenIn:  Tx.Query.TokenIn,
+				TokenOut: Tx.Query.TokenOut,
+				//AmountIn: ,
+				//AmountOut: ,
+			})
+		default:
+			//log.Printf("Event with topic %s not supported", l.Topics[0].Hex())
+		}
+	}
+}
+
+func DecodeInputData(ProtocolType string, Tx *types.Transaction) (DecodedInputData QueryData, err error) {
+	// Extraire le premier octet des données de transaction pour obtenir l'identifiant de méthode
+	HexMethod := Tx.Data()[:4]
+	// Extraire les données de transaction restantes
+	HexData := Tx.Data()[4:]
+	var ABI abi.ABI
+	var Method *abi.Method
+	var Args abi.Arguments
+	var Input []interface{}
+	if ABI, err = abiFromProtocolType(ProtocolType); err == nil {
+		if Method, Args, err = getMethodAndArgs(ABI, HexMethod); err == nil {
+			if Input, err = Args.Unpack(HexData); err == nil {
+				DecodedInputData = ParseInputDataTransaction(*Method, Input, Tx)
+			}
+		}
+	}
+	return
+}
+
+func getMethodAndArgs(ABI abi.ABI, HexMethod []byte) (*abi.Method, abi.Arguments, error) {
+	Method, err := ABI.MethodById(HexMethod)
+	if err != nil {
+		return nil, nil, err
+	}
+	Args := ABI.Methods[Method.Name].Inputs
+	return Method, Args, nil
+}
+
+func abiFromProtocolType(ProtocolType string) (ABI abi.ABI, err error) {
+	switch ProtocolType {
+	case "UniswapV2Router":
+		ABI, err = abi.JSON(strings.NewReader(router.RouterMetaData.ABI))
+	case "UniswapV3Router":
+		ABI, err = abi.JSON(strings.NewReader(uniswapV3.UniswapV3MetaData.ABI))
+	case "UniswapV2Pool":
+		ABI, err = abi.JSON(strings.NewReader(pool.PoolMetaData.ABI))
+	default:
+		err = fmt.Errorf("unsupported protocol type %s", ProtocolType)
+	}
+	return
+}
+
+func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types.Transaction) (Q QueryData) {
+
 	switch Method.Name {
 	// Uniswap v2
 	case "swapExactTokensForTokens":
-		Result.Name = Method.Name
-		Result.ExactIn = true
-		Result.Amount = Input[0].(*big.Int)
-		Result.MinMaxAmount = Input[1].(*big.Int)
+		Q.Protocol = "Uniswap V2"
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Input[0].(*big.Int), 18)
+		Q.MinMax = toFloat(Input[1].(*big.Int), 6)
 		Path := Input[2].([]common.Address)
-		Result.TokenIn = Path[0].String()
-		Result.TokenOut = Path[len(Path)-1].String()
+		Q.TokenIn = Path[0].String()
+		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapTokensForExactTokens":
-		Result.Name = Method.Name
-		Result.ExactIn = false
-		Result.Amount = Input[0].(*big.Int)
-		Result.MinMaxAmount = Input[1].(*big.Int)
+		Q.Protocol = "Uniswap V2"
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Input[0].(*big.Int), 18)
+		Q.MinMax = toFloat(Input[1].(*big.Int), 6)
 		Path := Input[2].([]common.Address)
-		Result.TokenIn = Path[0].String()
-		Result.TokenOut = Path[len(Path)-1].String()
+		Q.TokenIn = Path[0].String()
+		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactETHForTokens":
-		Result.Name = Method.Name
-		Result.ExactIn = true
-		Result.Amount = Tx.Value()
-		Result.MinMaxAmount = Input[0].(*big.Int)
+		Q.Protocol = "Uniswap V2"
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Tx.Value(), 18)
+		Q.MinMax = toFloat(Input[0].(*big.Int), 6)
 		Path := Input[1].([]common.Address)
-		Result.TokenIn = Path[0].String()
-		Result.TokenOut = Path[len(Path)-1].String()
+		Q.TokenIn = Path[0].String()
+		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapTokensForExactETH":
-		Result.Name = Method.Name
-		Result.ExactIn = false
-		Result.Amount = Input[0].(*big.Int)
-		Result.MinMaxAmount = Tx.Value()
+		Q.Protocol = "Uniswap V2"
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Input[0].(*big.Int), 18)
+		Q.MinMax = toFloat(Tx.Value(), 6)
 		Path := Input[1].([]common.Address)
-		Result.TokenIn = Path[0].String()
-		Result.TokenOut = Path[len(Path)-1].String()
+		Q.TokenIn = Path[0].String()
+		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactTokensForETH":
-		Result.Name = Method.Name
-		Result.ExactIn = true
-		Result.Amount = Input[0].(*big.Int)
-		Result.MinMaxAmount = Input[1].(*big.Int)
+		Q.Protocol = "Uniswap V2"
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Input[0].(*big.Int), 18)
+		Q.MinMax = toFloat(Input[1].(*big.Int), 6)
 		Path := Input[2].([]common.Address)
-		Result.TokenIn = Path[0].String()
-		Result.TokenOut = Path[len(Path)-1].String()
+		Q.TokenIn = Path[0].String()
+		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapETHForExactTokens":
-		Result.Name = Method.Name
-		Result.ExactIn = false
-		Result.Amount = Input[0].(*big.Int)
-		Result.MinMaxAmount = Tx.Value()
+		Q.Protocol = "Uniswap V2"
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Input[0].(*big.Int), 18)
+		Q.MinMax = toFloat(Tx.Value(), 6)
 		Path := Input[1].([]common.Address)
-		Result.TokenIn = Path[0].String()
-		Result.TokenOut = Path[len(Path)-1].String()
+		Q.TokenIn = Path[0].String()
+		Q.TokenOut = Path[len(Path)-1].String()
 	// Uniswap v3
 	case "exactInputSingle":
+		Q.Protocol = "Uniswap V3"
 		Params := Input[0].(struct {
 			TokenIn           common.Address "json:\"tokenIn\""
 			TokenOut          common.Address "json:\"tokenOut\""
@@ -202,13 +237,13 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			AmountOutMinimum  *big.Int       "json:\"amountOutMinimum\""
 			SqrtPriceLimitX96 *big.Int       "json:\"sqrtPriceLimitX96\""
 		})
-		Result.Name = Method.Name
-		Result.ExactIn = true
-		Result.Amount = Params.AmountIn
-		Result.MinMaxAmount = Params.AmountOutMinimum
-		Result.TokenIn = Params.TokenIn.String()
-		Result.TokenOut = Params.TokenOut.String()
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Params.AmountIn, 18)
+		Q.MinMax = toFloat(Params.AmountOutMinimum, 6)
+		Q.TokenIn = Params.TokenIn.String()
+		Q.TokenOut = Params.TokenOut.String()
 	case "exactOutputSingle":
+		Q.Protocol = "Uniswap V3"
 		Params := Input[0].(struct {
 			TokenIn           common.Address "json:\"tokenIn\""
 			TokenOut          common.Address "json:\"tokenOut\""
@@ -219,13 +254,13 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			AmountInMaximum   *big.Int       "json:\"amountInMaximum\""
 			SqrtPriceLimitX96 *big.Int       "json:\"sqrtPriceLimitX96\""
 		})
-		Result.Name = Method.Name
-		Result.ExactIn = false
-		Result.Amount = Params.AmountOut
-		Result.MinMaxAmount = Params.AmountInMaximum
-		Result.TokenIn = Params.TokenIn.String()
-		Result.TokenOut = Params.TokenOut.String()
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Params.AmountOut, 18)
+		Q.MinMax = toFloat(Params.AmountInMaximum, 6)
+		Q.TokenIn = Params.TokenIn.String()
+		Q.TokenOut = Params.TokenOut.String()
 	case "exactInput":
+		Q.Protocol = "Uniswap V3"
 		Params := Input[0].(struct {
 			Path             []uint8        "json:\"path\""
 			Recipient        common.Address "json:\"recipient\""
@@ -233,13 +268,13 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			AmountIn         *big.Int       "json:\"amountIn\""
 			AmountOutMinimum *big.Int       "json:\"amountOutMinimum\""
 		})
-		Result.Name = Method.Name
-		Result.ExactIn = true
-		Result.Amount = Params.AmountIn
-		Result.MinMaxAmount = Params.AmountOutMinimum
-		Result.TokenIn = common.HexToAddress(hexutil.Encode(Params.Path[:20])).String()
-		Result.TokenOut = common.HexToAddress(hexutil.Encode(Params.Path[len(Params.Path)-20:])).String()
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Params.AmountIn, 18)
+		Q.MinMax = toFloat(Params.AmountOutMinimum, 6)
+		Q.TokenIn = common.HexToAddress(hexutil.Encode(Params.Path[:20])).String()
+		Q.TokenOut = common.HexToAddress(hexutil.Encode(Params.Path[len(Params.Path)-20:])).String()
 	case "exactOutput":
+		Q.Protocol = "Uniswap V3"
 		Params := Input[0].(struct {
 			Path            []uint8        "json:\"path\""
 			Recipient       common.Address "json:\"recipient\""
@@ -247,61 +282,13 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			AmountOut       *big.Int       "json:\"amountOut\""
 			AmountInMaximum *big.Int       "json:\"amountInMaximum\""
 		})
-		Result.Name = Method.Name
-		Result.ExactIn = false
-		Result.Amount = Params.AmountOut
-		Result.MinMaxAmount = Params.AmountInMaximum
-		Result.TokenIn = common.HexToAddress(hexutil.Encode(Params.Path[:20])).String()
-		Result.TokenOut = common.HexToAddress(hexutil.Encode(Params.Path[len(Params.Path)-20:])).String()
-	/*case "multicall":
-	Calls := Input[0].([][]byte)
-	var Method abi.Method
-	var Args abi.Arguments
-	for _, Call := range Calls {
-		RawCallMethod := Call[:4]
-		RawCallData := Call[4:]
-		CallMethod, err := ABI.MethodById(RawCallMethod)
-		if err != nil {
-			continue
-		}
-		if strings.Contains(CallMethod.Name, "exact") {
-			Method = *CallMethod
-			Args = ABI.Methods[Method.Name].Inputs
-			Input, _ = Args.Unpack(RawCallData)
-			Result = parseTransaction(Method, Input, Tx, ABI)
-			break
-		}
-	}*/
-
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Params.AmountOut, 18)
+		Q.MinMax = toFloat(Params.AmountInMaximum, 6)
+		Q.TokenIn = common.HexToAddress(hexutil.Encode(Params.Path[:20])).String()
+		Q.TokenOut = common.HexToAddress(hexutil.Encode(Params.Path[len(Params.Path)-20:])).String()
 	default:
-		Result.Name = "Unsupported Method"
+		Q.Type = "Unsupported Method"
 	}
 	return
 }
-
-func ParseReceipt(client *ethclient.Client, Tx *types.Transaction) (TxReceipt TxReceiptStruct) {
-
-	receipt, err := client.TransactionReceipt(context.Background(), Tx.Hash())
-	if err != nil {
-		log.Println(err)
-	}
-
-	TxReceipt.CumulativeGasUsed = receipt.CumulativeGasUsed
-	TxReceipt.GasUsed = receipt.GasUsed
-	TxReceipt.ContractAddress = receipt.ContractAddress.Hex()
-	TxReceipt.Logs = receipt.Logs
-	TxReceipt.Status = receipt.Status == types.ReceiptStatusSuccessful
-
-	return
-}
-
-/*func ParseEventsFromReceipt(Receipt TxReceiptStruct, ProtocolType string) (events Event) {
-
-	return events
-}
-
-func ParseQueriesFromDecodedInputData(decodedInputData DecodedInputDataStruct) (queries Query) {
-	// Extraire les queries à partir du `DecodedInputData`
-	// Implémentez la logique en fonction du protocole (Uniswap v2 ou v3) et des données décodées
-	return queries
-}*/
