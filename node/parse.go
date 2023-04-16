@@ -1,6 +1,7 @@
 package node
 
 import (
+	"../WETH"
 	"../config"
 	"../uniswapV2/pool"
 	"../uniswapV2/router"
@@ -166,6 +167,8 @@ func abiFromProtocolType(ProtocolType string) (ABI abi.ABI, err error) {
 		ABI, err = abi.JSON(strings.NewReader(uniswapV3.UniswapV3MetaData.ABI))
 	case "UniswapV2Pool":
 		ABI, err = abi.JSON(strings.NewReader(pool.PoolMetaData.ABI))
+	case "WETH":
+		ABI, err = abi.JSON(strings.NewReader(WETH.WETHMetaData.ABI))
 	default:
 		err = fmt.Errorf("unsupported protocol type %s", ProtocolType)
 	}
@@ -177,51 +180,61 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 	switch Method.Name {
 	// Uniswap v2
 	case "swapExactTokensForTokens":
+		Path := Input[2].([]common.Address)
+		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), 18)
-		Q.MinMax = toFloat(Input[1].(*big.Int), 6)
-		Path := Input[2].([]common.Address)
+		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
+		Q.MinMax = toFloat(Input[1].(*big.Int), int(decimals))
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
+
 	case "swapTokensForExactTokens":
-		Q.Protocol = "Uniswap V2"
-		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), 18)
-		Q.MinMax = toFloat(Input[1].(*big.Int), 6)
 		Path := Input[2].([]common.Address)
+		Q.Protocol = "Uniswap V2"
+		decimals, _ := getDecimals(Client, Path[0])
+		Q.Type = Method.Name
+		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
+		Q.MinMax = toFloat(Input[1].(*big.Int), int(decimals))
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactETHForTokens":
+		Path := Input[1].([]common.Address)
+		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Tx.Value(), 18)
-		Q.MinMax = toFloat(Input[0].(*big.Int), 6)
-		Path := Input[1].([]common.Address)
+		Q.Amount = toFloat(Tx.Value(), int(decimals))
+		Q.MinMax = toFloat(Input[0].(*big.Int), int(decimals))
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapTokensForExactETH":
+		Path := Input[1].([]common.Address)
+		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), 18)
-		Q.MinMax = toFloat(Tx.Value(), 6)
-		Path := Input[1].([]common.Address)
+		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
+		Q.MinMax = toFloat(Tx.Value(), int(decimals))
+
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactTokensForETH":
+		Path := Input[2].([]common.Address)
+		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), 18)
-		Q.MinMax = toFloat(Input[1].(*big.Int), 6)
-		Path := Input[2].([]common.Address)
+		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
+		Q.MinMax = toFloat(Input[1].(*big.Int), int(decimals))
+
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapETHForExactTokens":
+		Path := Input[1].([]common.Address)
+		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), 18)
-		Q.MinMax = toFloat(Tx.Value(), 6)
-		Path := Input[1].([]common.Address)
+		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
+		Q.MinMax = toFloat(Tx.Value(), int(decimals))
+
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	// Uniswap v3

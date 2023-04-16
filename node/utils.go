@@ -1,7 +1,12 @@
 package node
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"log"
 	"math"
 	"math/big"
@@ -43,6 +48,29 @@ func toFloat(Amount *big.Int, decimals int) float64 {
 	Float := new(big.Float).Quo(Big, big.NewFloat(math.Pow10(decimals)))
 	Float64, _ := Float.Float64()
 	return Float64
+}
+
+func getDecimals(client *ethclient.Client, contractAddress common.Address) (uint8, error) {
+	contractABI, err := abiFromProtocolType("WETH")
+	if err != nil {
+		return 0, err
+	}
+
+	if _, exists := contractABI.Methods["decimals"]; !exists {
+		return 0, errors.New("method 'decimals' not found in ABI")
+	}
+
+	contract := bind.NewBoundContract(contractAddress, contractABI, client, client, client)
+
+	var decimals uint8
+	callOpts := &bind.CallOpts{Context: context.Background()}
+	outputs := []interface{}{&decimals}
+	err = contract.Call(callOpts, &outputs, "decimals")
+	if err != nil {
+		return 0, err
+	}
+
+	return decimals, nil
 }
 
 //   _____ ____  ____  ____    _     _     ____  _  __

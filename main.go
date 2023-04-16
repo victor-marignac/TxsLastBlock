@@ -8,14 +8,9 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
 	"log"
-	"sync"
 )
-
-var Client *ethclient.Client
-var Sync = &sync.WaitGroup{}
 
 // 0x15618650000000f0zef0zef0ezf0zefze1 = func UneFonction(UnArgument string)
 // 1561865 = Nom de la fonction
@@ -42,7 +37,7 @@ var Sync = &sync.WaitGroup{}
 // https://docs.uniswap.org/ -> https://docs.uniswap.org/contracts/v3/overview ->
 
 func main() {
-	Sync.Add(1)
+	node.Sync.Add(1)
 
 	err := Init()
 	if err != nil {
@@ -50,7 +45,7 @@ func main() {
 		return
 	}
 
-	Sub, err := node.SubscribeNewBlock(Client)
+	Sub, err := node.SubscribeNewBlock(node.Client)
 	if err != nil {
 		log.Println("Unable to subscribe:", err)
 		return
@@ -60,7 +55,7 @@ func main() {
 	DecodedTxsFeed := make(chan node.DecodedTx, 500)
 	go node.TxDecoder(TxsFeed, DecodedTxsFeed)
 
-	Sync.Wait()
+	node.Sync.Wait()
 	Shutdown()
 }
 
@@ -75,12 +70,12 @@ func ReadNewBlocks(Sub chan *types.Header) chan node.LocalTx {
 	Reader := func(Feed chan node.LocalTx) {
 		for {
 			NewBlock := <-Sub
-			Txs, err := node.GetBlockTxs(Client, NewBlock.Number)
+			Txs, err := node.GetBlockTxs(node.Client, NewBlock.Number)
 			if err != nil {
 				log.Println("Unable to get txs for block", NewBlock.Number.Int64(), ":", err)
 				continue
 			}
-			Logs, err := Client.FilterLogs(context.Background(), ethereum.FilterQuery{FromBlock: NewBlock.Number, ToBlock: NewBlock.Number})
+			Logs, err := node.Client.FilterLogs(context.Background(), ethereum.FilterQuery{FromBlock: NewBlock.Number, ToBlock: NewBlock.Number})
 			if err != nil {
 				log.Println("Unable to get logs for block", NewBlock.Number.Int64(), ":", err)
 				continue
@@ -116,7 +111,7 @@ func ReadNewBlocks(Sub chan *types.Header) chan node.LocalTx {
 }
 
 func Init() (err error) {
-	Client, err = node.Dial(config.InfuraBaseURI + config.InfuraKey)
+	node.Client, err = node.Dial(config.InfuraBaseURI + config.InfuraKey)
 	if err != nil {
 		err = errors.New(fmt.Sprint("node.Dial():", err))
 	}
