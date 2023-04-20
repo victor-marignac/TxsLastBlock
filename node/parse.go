@@ -115,15 +115,35 @@ func (Tx *DecodedTx) ParseReceipt() {
 				log.Printf("Erreur lors de l'extraction des données de l'événement Swap: %v", err)
 				continue
 			}
+
+			amountIn := new(big.Int)
+			amountOut := new(big.Int)
+
+			if SwapEvent.Amount0In != nil && SwapEvent.Amount1In != nil {
+				amountIn.Add(SwapEvent.Amount0In, SwapEvent.Amount1In)
+			}
+
+			if SwapEvent.Amount0Out != nil && SwapEvent.Amount1Out != nil {
+				amountOut.Add(SwapEvent.Amount0Out, SwapEvent.Amount1Out)
+			}
+
+			log.Printf("Amount0In: %v", SwapEvent.Amount0In)
+			log.Printf("Amount1In: %v", SwapEvent.Amount1In)
+			log.Printf("Amount0Out: %v", SwapEvent.Amount0Out)
+			log.Printf("Amount1Out: %v", SwapEvent.Amount1Out)
+
+			log.Printf("AmountIn: %v", amountIn)
+			log.Printf("AmountOut: %v", amountOut)
+
 			Tx.Events = append(Tx.Events, Event{
-				Protocol: "Uniswap V2",
-				Contract: Tx.Tx.To,
-				Type:     "Swap",
-				Pool:     l.Address.String(),
-				TokenIn:  Tx.Query.TokenIn,
-				TokenOut: Tx.Query.TokenOut,
-				//AmountIn: ,
-				//AmountOut: ,
+				Protocol:  "Uniswap V2",
+				Contract:  Tx.Tx.To,
+				Type:      "Swap",
+				Pool:      l.Address.String(),
+				TokenIn:   Tx.Query.TokenIn,
+				TokenOut:  Tx.Query.TokenOut,
+				AmountIn:  amountIn,
+				AmountOut: amountOut,
 			})
 		default:
 			//log.Printf("Event with topic %s not supported", l.Topics[0].Hex())
@@ -180,7 +200,10 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 	switch Method.Name {
 	// Uniswap v2
 	case "swapExactTokensForTokens":
-		Path := Input[2].([]common.Address)
+		Path, err := Input[2].([]common.Address)
+		if !err {
+			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		}
 		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
@@ -190,7 +213,10 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.TokenOut = Path[len(Path)-1].String()
 
 	case "swapTokensForExactTokens":
-		Path := Input[2].([]common.Address)
+		Path, err := Input[2].([]common.Address)
+		if !err {
+			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		}
 		Q.Protocol = "Uniswap V2"
 		decimals, _ := getDecimals(Client, Path[0])
 		Q.Type = Method.Name
@@ -199,7 +225,10 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactETHForTokens":
-		Path := Input[1].([]common.Address)
+		Path, err := Input[1].([]common.Address)
+		if !err {
+			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		}
 		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
@@ -208,7 +237,10 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapTokensForExactETH":
-		Path := Input[1].([]common.Address)
+		Path, err := Input[1].([]common.Address)
+		if !err {
+			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		}
 		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
@@ -218,7 +250,10 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactTokensForETH":
-		Path := Input[2].([]common.Address)
+		Path, err := Input[2].([]common.Address)
+		if !err {
+			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		}
 		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
@@ -228,7 +263,10 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapETHForExactTokens":
-		Path := Input[1].([]common.Address)
+		Path, err := Input[1].([]common.Address)
+		if !err {
+			log.Println("Erreur d'assertion Input[2] as []common.Address")
+		}
 		decimals, _ := getDecimals(Client, Path[0])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name

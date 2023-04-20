@@ -44,12 +44,12 @@ type QueryData struct {
 }
 
 type Event struct {
-	Protocol  string  `json:"Protocol"`  // Uniswap v2
-	Contract  string  `json:"Contract"`  // L'adresse du contrat du routeur Uniswap v2
-	Type      string  `json:"Type"`      // Swap
-	Pool      string  `json:"Pool"`      // L'adresse du pool
-	TokenIn   string  `json:"TokenIn"`   // Le token in
-	TokenOut  string  `json:"TokenOut"`  // Le token out
-	AmountIn  float64 `json:"AmountIn"`  // Le montant qui est arrivé dans le pool
-	AmountOut float64 `json:"AmountOut"` // Le montant qui est sorti du pool
+	Protocol  string   `json:"Protocol"`  // Uniswap v2
+	Contract  string   `json:"Contract"`  // L'adresse du contrat du routeur Uniswap v2
+	Type      string   `json:"Type"`      // Swap
+	Pool      string   `json:"Pool"`      // L'adresse du pool
+	TokenIn   string   `json:"TokenIn"`   // Le token in
+	TokenOut  string   `json:"TokenOut"`  // Le token out
+	AmountIn  *big.Int `json:"AmountIn"`  // Le montant qui est arrivé dans le pool
+	AmountOut *big.Int `json:"AmountOut"` // Le montant qui est sorti du pool
 }
