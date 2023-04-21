@@ -110,7 +110,7 @@ func (Tx *DecodedTx) ParseReceipt() {
 		// Ca veut dire que c'est un trade de 1700 USDC -> 1 WETH
 		switch l.Topics[0].Hex() {
 		case config.UniswapV2EventSwap:
-			err = ABI.UnpackIntoInterface(&SwapEvent, "swap", l.Data)
+			err = ABI.UnpackIntoInterface(&SwapEvent, "Swap", l.Data)
 			if err != nil {
 				log.Printf("Erreur lors de l'extraction des données de l'événement Swap: %v", err)
 				continue
@@ -127,13 +127,8 @@ func (Tx *DecodedTx) ParseReceipt() {
 				amountOut.Add(SwapEvent.Amount0Out, SwapEvent.Amount1Out)
 			}
 
-			log.Printf("Amount0In: %v", SwapEvent.Amount0In)
-			log.Printf("Amount1In: %v", SwapEvent.Amount1In)
-			log.Printf("Amount0Out: %v", SwapEvent.Amount0Out)
-			log.Printf("Amount1Out: %v", SwapEvent.Amount1Out)
-
-			log.Printf("AmountIn: %v", amountIn)
-			log.Printf("AmountOut: %v", amountOut)
+			decimalsIn, _ := getDecimals(Client, Tx.Query.TokenIn)
+			decimalsOut, _ := getDecimals(Client, Tx.Query.TokenOut)
 
 			Tx.Events = append(Tx.Events, Event{
 				Protocol:  "Uniswap V2",
@@ -142,8 +137,8 @@ func (Tx *DecodedTx) ParseReceipt() {
 				Pool:      l.Address.String(),
 				TokenIn:   Tx.Query.TokenIn,
 				TokenOut:  Tx.Query.TokenOut,
-				AmountIn:  amountIn,
-				AmountOut: amountOut,
+				AmountIn:  toFloat(amountIn, int(decimalsIn)),
+				AmountOut: toFloat(amountOut, int(decimalsOut)),
 			})
 		default:
 			//log.Printf("Event with topic %s not supported", l.Topics[0].Hex())
