@@ -11,11 +11,11 @@ type DatabaseStruct struct {
 	Mutex *sync.RWMutex
 }
 
-func (ThisDatabase *DatabaseStruct) ReadTransaction(Hash string) (Tx *types.Transaction, Error error) {
+func (ThisDatabase *DatabaseStruct) ReadTokenDecimals(address string) (decimals int, Error error) {
 	ThisDatabase.Mutex.RLock()
 	defer ThisDatabase.Mutex.RUnlock()
 	var Exist bool
-	Tx, Exist = ThisDatabase.Db[Hash]
+	decimals, Exist = ThisDatabase.Db[address]
 	if !Exist {
 		Error = errors.New("Tx doesnt exist.")
 	}

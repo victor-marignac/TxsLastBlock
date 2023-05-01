@@ -98,6 +98,10 @@ func (Tx *DecodedTx) ParseReceipt() {
 
 	for _, l := range Tx.Tx.Logs {
 		var SwapEvent pool.PoolSwap
+		if len(l.Topics) == 0 {
+			log.Printf("Aucun topic trouvé dans les logs")
+			continue
+		}
 		// Amount0In = Token 0 In
 		// Amount1In = Token 1 In
 		// Amount0Out = Token 0 Out
@@ -116,8 +120,7 @@ func (Tx *DecodedTx) ParseReceipt() {
 				continue
 			}
 
-			amountIn := new(big.Int)
-			amountOut := new(big.Int)
+			amountIn, amountOut := new(big.Int), new(big.Int)
 
 			if SwapEvent.Amount0In != nil && SwapEvent.Amount1In != nil {
 				amountIn.Add(SwapEvent.Amount0In, SwapEvent.Amount1In)
@@ -127,8 +130,11 @@ func (Tx *DecodedTx) ParseReceipt() {
 				amountOut.Add(SwapEvent.Amount0Out, SwapEvent.Amount1Out)
 			}
 
-			decimalsIn, _ := getDecimals(Client, Tx.Query.TokenIn)
-			decimalsOut, _ := getDecimals(Client, Tx.Query.TokenOut)
+			tokenInAddress := common.HexToAddress(Tx.Query.TokenIn)
+			tokenOutAddress := common.HexToAddress(Tx.Query.TokenOut)
+
+			decimalsIn, _ := getDecimals(Client, tokenInAddress)
+			decimalsOut, _ := getDecimals(Client, tokenOutAddress)
 
 			Tx.Events = append(Tx.Events, Event{
 				Protocol:  "Uniswap V2",
@@ -137,8 +143,8 @@ func (Tx *DecodedTx) ParseReceipt() {
 				Pool:      l.Address.String(),
 				TokenIn:   Tx.Query.TokenIn,
 				TokenOut:  Tx.Query.TokenOut,
-				AmountIn:  toFloat(amountIn, int(decimalsIn)),
-				AmountOut: toFloat(amountOut, int(decimalsOut)),
+				AmountIn:  toFloat(amountIn, decimalsIn),
+				AmountOut: toFloat(amountOut, decimalsOut),
 			})
 		default:
 			//log.Printf("Event with topic %s not supported", l.Topics[0].Hex())
@@ -199,11 +205,16 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		if !err {
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
-		decimals, _ := getDecimals(Client, Path[0])
+		decimalsIn, _ := getDecimals(Client, Path[0])
+		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
-		Q.MinMax = toFloat(Input[1].(*big.Int), int(decimals))
+		Q.Amount = toFloat(Input[0].(*big.Int), decimalsIn)
+		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
+
+		log.Println("Query decimal In", decimalsIn)
+		log.Println("Query decimal Out", decimalsOut)
+
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 
@@ -214,9 +225,14 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		}
 		Q.Protocol = "Uniswap V2"
 		decimals, _ := getDecimals(Client, Path[0])
+		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
-		Q.MinMax = toFloat(Input[1].(*big.Int), int(decimals))
+		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
+		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
+
+		log.Println("Query decimal In", decimals)
+		log.Println("Query decimal Out", decimalsOut)
+
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactETHForTokens":
@@ -225,10 +241,15 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
 		decimals, _ := getDecimals(Client, Path[0])
+		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Tx.Value(), int(decimals))
-		Q.MinMax = toFloat(Input[0].(*big.Int), int(decimals))
+		Q.Amount = toFloat(Tx.Value(), decimals)
+		Q.MinMax = toFloat(Input[0].(*big.Int), decimalsOut)
+
+		log.Println("Query decimal In", decimals)
+		log.Println("Query decimal Out", decimalsOut)
+
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapTokensForExactETH":
@@ -237,10 +258,14 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
 		decimals, _ := getDecimals(Client, Path[0])
+		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
-		Q.MinMax = toFloat(Tx.Value(), int(decimals))
+		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
+		Q.MinMax = toFloat(Tx.Value(), decimalsOut)
+
+		log.Println("Query decimal In", decimals)
+		log.Println("Query decimal Out", decimalsOut)
 
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
@@ -250,10 +275,11 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
 		decimals, _ := getDecimals(Client, Path[0])
+		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
-		Q.MinMax = toFloat(Input[1].(*big.Int), int(decimals))
+		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
+		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
 
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
@@ -263,10 +289,12 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			log.Println("Erreur d'assertion Input[2] as []common.Address")
 		}
 		decimals, _ := getDecimals(Client, Path[0])
+		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
+
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), int(decimals))
-		Q.MinMax = toFloat(Tx.Value(), int(decimals))
+		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
+		Q.MinMax = toFloat(Tx.Value(), decimalsOut)
 
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
