@@ -65,6 +65,26 @@ func getDecimals(client *ethclient.Client, contractAddress common.Address) (int,
 	return int(decimals), nil
 }
 
+func getDecimalsWithCache(client *ethclient.Client, contractAddress common.Address) (int, error) {
+	// Vérifiez si l'adresse du token existe dans la base de données
+	decimals, err := tokenDecimalsDB.ReadTokenDecimals(contractAddress.String())
+	if err == nil {
+		// Si les décimales existent, renvoyez-les
+		return decimals, nil
+	}
+
+	// Sinon, récupérez les décimales à l'aide de la fonction getDecimals
+	decimals, err = getDecimals(client, contractAddress)
+	if err != nil {
+		return 0, err
+	}
+
+	// Enregistrez les décimales dans la base de données pour une utilisation ultérieure
+	tokenDecimalsDB.WriteTokenDecimals(contractAddress.String(), decimals)
+
+	return decimals, nil
+}
+
 //   _____ ____  ____  ____    _     _     ____  _  __
 //  /  __//  _ \/  _ \/  _ \  / \   / \ /\/   _\/ |/ /
 //  | |  _| / \|| / \|| | \|  | |   | | |||  /  |   /

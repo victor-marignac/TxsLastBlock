@@ -3,6 +3,7 @@ package node
 import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
+	"sync"
 )
 
 type DecodedTx struct {
@@ -52,4 +53,9 @@ type Event struct {
 	TokenOut  string  `json:"TokenOut"`  // Le token out
 	AmountIn  float64 `json:"AmountIn"`  // Le montant qui est arrivé dans le pool
 	AmountOut float64 `json:"AmountOut"` // Le montant qui est sorti du pool
+}
+
+type DatabaseStruct struct {
+	Db    map[string]int
+	Mutex *sync.RWMutex
 }

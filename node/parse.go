@@ -133,8 +133,8 @@ func (Tx *DecodedTx) ParseReceipt() {
 			tokenInAddress := common.HexToAddress(Tx.Query.TokenIn)
 			tokenOutAddress := common.HexToAddress(Tx.Query.TokenOut)
 
-			decimalsIn, _ := getDecimals(Client, tokenInAddress)
-			decimalsOut, _ := getDecimals(Client, tokenOutAddress)
+			decimalsIn, _ := getDecimalsWithCache(Client, tokenInAddress)
+			decimalsOut, _ := getDecimalsWithCache(Client, tokenOutAddress)
 
 			Tx.Events = append(Tx.Events, Event{
 				Protocol:  "Uniswap V2",
@@ -205,8 +205,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		if !err {
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
-		decimalsIn, _ := getDecimals(Client, Path[0])
-		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
+		decimalsIn, _ := getDecimalsWithCache(Client, Path[0])
+		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Input[0].(*big.Int), decimalsIn)
@@ -224,8 +224,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
 		Q.Protocol = "Uniswap V2"
-		decimals, _ := getDecimals(Client, Path[0])
-		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
+		decimals, _ := getDecimalsWithCache(Client, Path[0])
+		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
 		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
@@ -240,8 +240,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		if !err {
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
-		decimals, _ := getDecimals(Client, Path[0])
-		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
+		decimals, _ := getDecimalsWithCache(Client, Path[0])
+		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Tx.Value(), decimals)
@@ -257,8 +257,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		if !err {
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
-		decimals, _ := getDecimals(Client, Path[0])
-		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
+		decimals, _ := getDecimalsWithCache(Client, Path[0])
+		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
@@ -274,8 +274,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		if !err {
 			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
 		}
-		decimals, _ := getDecimals(Client, Path[0])
-		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
+		decimals, _ := getDecimalsWithCache(Client, Path[0])
+		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
@@ -288,8 +288,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		if !err {
 			log.Println("Erreur d'assertion Input[2] as []common.Address")
 		}
-		decimals, _ := getDecimals(Client, Path[0])
-		decimalsOut, _ := getDecimals(Client, Path[len(Path)-1])
+		decimals, _ := getDecimalsWithCache(Client, Path[0])
+		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 
 		Q.Protocol = "Uniswap V2"
 		Q.Type = Method.Name
@@ -311,9 +311,11 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			AmountOutMinimum  *big.Int       "json:\"amountOutMinimum\""
 			SqrtPriceLimitX96 *big.Int       "json:\"sqrtPriceLimitX96\""
 		})
+		decimals, _ := getDecimalsWithCache(Client, Params.TokenIn)
+		decimalsOut, _ := getDecimalsWithCache(Client, Params.TokenOut)
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Params.AmountIn, 18)
-		Q.MinMax = toFloat(Params.AmountOutMinimum, 6)
+		Q.Amount = toFloat(Params.AmountIn, decimals)
+		Q.MinMax = toFloat(Params.AmountOutMinimum, decimalsOut)
 		Q.TokenIn = Params.TokenIn.String()
 		Q.TokenOut = Params.TokenOut.String()
 	case "exactOutputSingle":
