@@ -211,10 +211,6 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Input[0].(*big.Int), decimalsIn)
 		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
-
-		log.Println("Query decimal In", decimalsIn)
-		log.Println("Query decimal Out", decimalsOut)
-
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 
@@ -229,10 +225,6 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
 		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
-
-		log.Println("Query decimal In", decimals)
-		log.Println("Query decimal Out", decimalsOut)
-
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactETHForTokens":
@@ -246,10 +238,6 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Tx.Value(), decimals)
 		Q.MinMax = toFloat(Input[0].(*big.Int), decimalsOut)
-
-		log.Println("Query decimal In", decimals)
-		log.Println("Query decimal Out", decimalsOut)
-
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapTokensForExactETH":
@@ -263,10 +251,6 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		Q.Type = Method.Name
 		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
 		Q.MinMax = toFloat(Tx.Value(), decimalsOut)
-
-		log.Println("Query decimal In", decimals)
-		log.Println("Query decimal Out", decimalsOut)
-
 		Q.TokenIn = Path[0].String()
 		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactTokensForETH":

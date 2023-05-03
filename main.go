@@ -37,7 +37,7 @@ import (
 // https://docs.uniswap.org/ -> https://docs.uniswap.org/contracts/v3/overview ->
 
 func main() {
-	node.Sync.Add(1)
+	node.Sync.Add(2)
 
 	err := Init()
 	if err != nil {
@@ -55,6 +55,7 @@ func main() {
 	DecodedTxsFeed := make(chan node.DecodedTx, 500)
 	go node.TxDecoder(TxsFeed, DecodedTxsFeed)
 
+	node.Sync.Wait()
 	node.Sync.Wait()
 	Shutdown()
 }
