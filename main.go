@@ -62,6 +62,7 @@ func main() {
 
 func Shutdown() {
 	log.Println("Shutting down gracefully..")
+
 	// save db
 	// whatever..
 }

@@ -85,6 +85,17 @@ func getDecimalsWithCache(client *ethclient.Client, contractAddress common.Addre
 	return decimals, nil
 }
 
+func DisplayTokensAndDecimals() {
+	// Utilisez la méthode DatabaseCopy() pour obtenir une copie de la base de données
+	dbCopy := tokenDecimalsDB.DatabaseCopy()
+
+	// Parcourez la copie de la base de données et affichez les tokens et leurs décimales
+	fmt.Println("Tokens and their decimals:")
+	for tokenAddress, decimals := range dbCopy {
+		fmt.Printf("Token Address: %s, Decimals: %d\n", tokenAddress, decimals)
+	}
+}
+
 //   _____ ____  ____  ____    _     _     ____  _  __
 //  /  __//  _ \/  _ \/  _ \  / \   / \ /\/   _\/ |/ /
 //  | |  _| / \|| / \|| | \|  | |   | | |||  /  |   /

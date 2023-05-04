@@ -42,6 +42,7 @@ func TxDecoder(TxsFeed chan LocalTx, DecodedTxsFeed chan DecodedTx) {
 				log.Println("ParseInputData() error:", err, "(", NewTx.Tx.Hash, ")")
 			}
 			NewTx.ParseReceipt()
+			//DisplayTokensAndDecimals()
 
 			// Envoyez la structure DecodedTx au canal DecodedTxsFeed
 			DecodedTxsFeed <- NewTx
