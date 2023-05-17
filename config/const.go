@@ -8,4 +8,5 @@ const (
 	UniswapV2FactoryAddress = `0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f`
 	UniswapV2EventSwap      = `0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822`
 	UniswapV2EventTransfert = `0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef`
+	TokenDBFileName         = `tokenDB.txt`
 )

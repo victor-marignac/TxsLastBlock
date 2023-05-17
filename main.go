@@ -37,13 +37,15 @@ import (
 // https://docs.uniswap.org/ -> https://docs.uniswap.org/contracts/v3/overview ->
 
 func main() {
-	node.Sync.Add(2)
+	node.Sync.Add(1)
 
 	err := Init()
 	if err != nil {
 		log.Println("Initialization error:", err)
 		return
 	}
+
+	node.LoadTokensFromFile()
 
 	Sub, err := node.SubscribeNewBlock(node.Client)
 	if err != nil {
@@ -56,13 +58,12 @@ func main() {
 	go node.TxDecoder(TxsFeed, DecodedTxsFeed)
 
 	node.Sync.Wait()
-	node.Sync.Wait()
 	Shutdown()
 }
 
 func Shutdown() {
 	log.Println("Shutting down gracefully..")
-
+	node.SaveTokensToFile()
 	// save db
 	// whatever..
 }
@@ -85,6 +86,7 @@ func ReadNewBlocks(Sub chan *types.Header) chan node.LocalTx {
 				log.Println("Empty logs for block", NewBlock.Number.Int64())
 			}
 			log.Println(len(Txs), "txs in block", NewBlock.Number.Int64(), "(", len(Logs), "events )")
+			//node.DisplayTokensAndDecimals()
 			var LogsByTxs = make(map[common.Hash][]*types.Log)
 			for _, l := range Logs {
 				Log := l

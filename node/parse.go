@@ -202,87 +202,79 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 	switch Method.Name {
 	// Uniswap v2
 	case "swapExactTokensForTokens":
-		Path, err := Input[2].([]common.Address)
-		if !err {
-			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		Path := Input[2].([]common.Address)
+		if len(Path) > 0 {
+			decimalsIn, _ := getDecimalsWithCache(Client, Path[0])
+			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
+			Q.Protocol = "Uniswap V2"
+			Q.Type = Method.Name
+			Q.Amount = toFloat(Input[0].(*big.Int), decimalsIn)
+			Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
+			Q.TokenIn = Path[0].String()
+			Q.TokenOut = Path[len(Path)-1].String()
 		}
-		decimalsIn, _ := getDecimalsWithCache(Client, Path[0])
-		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
-		Q.Protocol = "Uniswap V2"
-		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), decimalsIn)
-		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
-		Q.TokenIn = Path[0].String()
-		Q.TokenOut = Path[len(Path)-1].String()
 
 	case "swapTokensForExactTokens":
-		Path, err := Input[2].([]common.Address)
-		if !err {
-			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		Path := Input[2].([]common.Address)
+		if len(Path) > 0 {
+			Q.Protocol = "Uniswap V2"
+			decimals, _ := getDecimalsWithCache(Client, Path[0])
+			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
+			Q.Type = Method.Name
+			Q.Amount = toFloat(Input[0].(*big.Int), decimals)
+			Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
+			Q.TokenIn = Path[0].String()
+			Q.TokenOut = Path[len(Path)-1].String()
 		}
-		Q.Protocol = "Uniswap V2"
-		decimals, _ := getDecimalsWithCache(Client, Path[0])
-		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
-		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
-		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
-		Q.TokenIn = Path[0].String()
-		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapExactETHForTokens":
-		Path, err := Input[1].([]common.Address)
-		if !err {
-			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		Path := Input[1].([]common.Address)
+		if len(Path) > 0 {
+			decimals, _ := getDecimalsWithCache(Client, Path[0])
+			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
+			Q.Protocol = "Uniswap V2"
+			Q.Type = Method.Name
+			Q.Amount = toFloat(Tx.Value(), decimals)
+			Q.MinMax = toFloat(Input[0].(*big.Int), decimalsOut)
+			Q.TokenIn = Path[0].String()
+			Q.TokenOut = Path[len(Path)-1].String()
 		}
-		decimals, _ := getDecimalsWithCache(Client, Path[0])
-		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
-		Q.Protocol = "Uniswap V2"
-		Q.Type = Method.Name
-		Q.Amount = toFloat(Tx.Value(), decimals)
-		Q.MinMax = toFloat(Input[0].(*big.Int), decimalsOut)
-		Q.TokenIn = Path[0].String()
-		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapTokensForExactETH":
-		Path, err := Input[1].([]common.Address)
-		if !err {
-			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		Path := Input[1].([]common.Address)
+		if len(Path) > 0 {
+			decimals, _ := getDecimalsWithCache(Client, Path[0])
+			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
+			Q.Protocol = "Uniswap V2"
+			Q.Type = Method.Name
+			Q.Amount = toFloat(Input[0].(*big.Int), decimals)
+			Q.MinMax = toFloat(Tx.Value(), decimalsOut)
+			Q.TokenIn = Path[0].String()
+			Q.TokenOut = Path[len(Path)-1].String()
 		}
-		decimals, _ := getDecimalsWithCache(Client, Path[0])
-		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
-		Q.Protocol = "Uniswap V2"
-		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
-		Q.MinMax = toFloat(Tx.Value(), decimalsOut)
-		Q.TokenIn = Path[0].String()
-		Q.TokenOut = Path[len(Path)-1].String()
+
 	case "swapExactTokensForETH":
-		Path, err := Input[2].([]common.Address)
-		if !err {
-			log.Println("Erreur d'assertion Input[2] as []common.Address", err)
+		Path := Input[2].([]common.Address)
+		if len(Path) > 0 {
+			decimals, _ := getDecimalsWithCache(Client, Path[0])
+			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
+			Q.Protocol = "Uniswap V2"
+			Q.Type = Method.Name
+			Q.Amount = toFloat(Input[0].(*big.Int), decimals)
+			Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
+			Q.TokenIn = Path[0].String()
+			Q.TokenOut = Path[len(Path)-1].String()
 		}
-		decimals, _ := getDecimalsWithCache(Client, Path[0])
-		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
-		Q.Protocol = "Uniswap V2"
-		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
-		Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
-
-		Q.TokenIn = Path[0].String()
-		Q.TokenOut = Path[len(Path)-1].String()
 	case "swapETHForExactTokens":
-		Path, err := Input[1].([]common.Address)
-		if !err {
-			log.Println("Erreur d'assertion Input[2] as []common.Address")
+		Path := Input[1].([]common.Address)
+		if len(Path) > 0 {
+			decimals, _ := getDecimalsWithCache(Client, Path[0])
+			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
+			Q.Protocol = "Uniswap V2"
+			Q.Type = Method.Name
+			Q.Amount = toFloat(Input[0].(*big.Int), decimals)
+			Q.MinMax = toFloat(Tx.Value(), decimalsOut)
+			Q.TokenIn = Path[0].String()
+			Q.TokenOut = Path[len(Path)-1].String()
 		}
-		decimals, _ := getDecimalsWithCache(Client, Path[0])
-		decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
-
-		Q.Protocol = "Uniswap V2"
-		Q.Type = Method.Name
-		Q.Amount = toFloat(Input[0].(*big.Int), decimals)
-		Q.MinMax = toFloat(Tx.Value(), decimalsOut)
-
-		Q.TokenIn = Path[0].String()
-		Q.TokenOut = Path[len(Path)-1].String()
 	// Uniswap v3
 	case "exactInputSingle":
 		Q.Protocol = "Uniswap V3"
