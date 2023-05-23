@@ -14,6 +14,7 @@ import (
 	"math"
 	"math/big"
 	"os"
+	"strconv"
 )
 
 func (l *LocalTx) ToString() string {
@@ -40,12 +41,6 @@ func (Tx *DecodedTx) Log() {
 }
 
 // toFloat convertit la valeur de la transaction en Ether
-// Ethereum = 18 décimales
-// USDC = 6 décimales
-// Comment trouver les bonnes décimales ? :)
-// 1.5 Ether :
-// big.Int = 150000000000000000
-// float64 = 1.5
 func toFloat(Amount *big.Int, decimals int) float64 {
 	Big := new(big.Float)
 	Big.SetString(Amount.String())
@@ -54,6 +49,19 @@ func toFloat(Amount *big.Int, decimals int) float64 {
 	return Float64
 }
 
+func floatToString(Float float64) (String string) {
+	String = strconv.FormatFloat(Float, 'f', -1, 64)
+	return
+}
+
+// toBigInt convertit la valeur de la transaction en big.Int
+func toBigInt(Amount float64, decimals int) *big.Int {
+	Float := new(big.Float).Mul(big.NewFloat(Amount), big.NewFloat(math.Pow10(decimals)))
+	BigInt, _ := Float.Int(nil)
+	return BigInt
+}
+
+// getDecimals récupère le nombre de décimales d'un token
 func getDecimals(client *ethclient.Client, contractAddress common.Address) (int, error) {
 	contract, err := WETH.NewWETH(contractAddress, client)
 	if err != nil {
@@ -69,6 +77,7 @@ func getDecimals(client *ethclient.Client, contractAddress common.Address) (int,
 	return int(decimals), nil
 }
 
+// getDecimalsWithCache récupère le nombre de décimales d'un token à partir de la base de données
 func getDecimalsWithCache(client *ethclient.Client, contractAddress common.Address) (int, error) {
 	// Vérifiez si l'adresse du token existe dans la base de données
 	decimals, err := tokenDecimalsDB.ReadTokenDecimals(contractAddress.String())
@@ -89,6 +98,7 @@ func getDecimalsWithCache(client *ethclient.Client, contractAddress common.Addre
 	return decimals, nil
 }
 
+// DisplayTokensAndDecimals affiche les tokens et leurs décimales
 func DisplayTokensAndDecimals() {
 	// Utilisez la méthode DatabaseCopy() pour obtenir une copie de la base de données
 	dbCopy := tokenDecimalsDB.DatabaseCopy()

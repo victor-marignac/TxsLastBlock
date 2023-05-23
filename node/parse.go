@@ -3,8 +3,8 @@ package node
 import (
 	"../WETH"
 	"../config"
-	"../uniswapV2/pool"
-	"../uniswapV2/router"
+	"../uniswapV2/uniV2Pool"
+	"../uniswapV2/uniV2Router"
 	"../uniswapV3"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -41,7 +41,7 @@ func TxDecoder(TxsFeed chan LocalTx, DecodedTxsFeed chan DecodedTx) {
 			if err != nil {
 				log.Println("ParseInputData() error:", err, "(", NewTx.Tx.Hash, ")")
 			}
-			NewTx.ParseReceipt()
+			NewTx.ParseLogs()
 			//DisplayTokensAndDecimals()
 
 			// Envoyez la structure DecodedTx au canal DecodedTxsFeed
@@ -91,14 +91,19 @@ func (Tx *DecodedTx) ParseInputData() (err error) {
 	return
 }
 
-func (Tx *DecodedTx) ParseReceipt() {
-	ABI, err := abiFromProtocolType("UniswapV2Pool")
+func (Tx *DecodedTx) ParseLogs() {
+	AbiV2, err := abiFromProtocolType("UniswapV2Pool")
+	if err != nil {
+		log.Fatalf("Erreur lors de la création de l'ABI: %v", err)
+	}
+
+	AbiV3, err := abiFromProtocolType("UniswapV3Pool")
 	if err != nil {
 		log.Fatalf("Erreur lors de la création de l'ABI: %v", err)
 	}
 
 	for _, l := range Tx.Tx.Logs {
-		var SwapEvent pool.PoolSwap
+		var SwapEvent uniV2Pool.PoolSwap
 		if len(l.Topics) == 0 {
 			log.Printf("Aucun topic trouvé dans les logs")
 			continue
@@ -115,7 +120,7 @@ func (Tx *DecodedTx) ParseReceipt() {
 		// Ca veut dire que c'est un trade de 1700 USDC -> 1 WETH
 		switch l.Topics[0].Hex() {
 		case config.UniswapV2EventSwap:
-			err = ABI.UnpackIntoInterface(&SwapEvent, "Swap", l.Data)
+			err = AbiV2.UnpackIntoInterface(&SwapEvent, "Swap", l.Data)
 			if err != nil {
 				log.Printf("Erreur lors de l'extraction des données de l'événement Swap: %v", err)
 				continue
@@ -144,8 +149,43 @@ func (Tx *DecodedTx) ParseReceipt() {
 				Pool:      l.Address.String(),
 				TokenIn:   Tx.Query.TokenIn,
 				TokenOut:  Tx.Query.TokenOut,
-				AmountIn:  toFloat(amountIn, decimalsIn),
-				AmountOut: toFloat(amountOut, decimalsOut),
+				AmountIn:  floatToString(toFloat(amountIn, decimalsIn)),
+				AmountOut: floatToString(toFloat(amountOut, decimalsOut)),
+			})
+		case config.UniswapV3EventSwap:
+			err = AbiV3.UnpackIntoInterface(&SwapEventV3, "Swap", l.Data)
+			if err != nil {
+				log.Printf("Erreur lors de l'extraction des données de l'événement Swap: %v", err)
+				continue
+			}
+
+			// Logic for Uniswap V3 swaps
+			// For example, assuming SwapEventV3 has Amount0, Amount1, TickLower and TickUpper fields
+			amountIn, amountOut := new(big.Int), new(big.Int)
+
+			if SwapEventV3.Amount0 != nil && SwapEventV3.Amount1 != nil {
+				amountIn.Add(SwapEventV3.Amount0, SwapEventV3.Amount1)
+			}
+
+			if SwapEventV3.Amount0 != nil && SwapEventV3.Amount1 != nil {
+				amountOut.Add(SwapEventV3.Amount0, SwapEventV3.Amount1)
+			}
+
+			tokenInAddress := common.HexToAddress(Tx.Query.TokenIn)
+			tokenOutAddress := common.HexToAddress(Tx.Query.TokenOut)
+
+			decimalsIn, _ := getDecimalsWithCache(Client, tokenInAddress)
+			decimalsOut, _ := getDecimalsWithCache(Client, tokenOutAddress)
+
+			Tx.Events = append(Tx.Events, Event{
+				Protocol:  "Uniswap V3",
+				Contract:  Tx.Tx.To,
+				Type:      "Swap",
+				Pool:      l.Address.String(),
+				TokenIn:   Tx.Query.TokenIn,
+				TokenOut:  Tx.Query.TokenOut,
+				AmountIn:  floatToString(toFloat(amountIn, decimalsIn)),
+				AmountOut: floatToString(toFloat(amountOut, decimalsOut)),
 			})
 		default:
 			//log.Printf("Event with topic %s not supported", l.Topics[0].Hex())
@@ -184,11 +224,13 @@ func getMethodAndArgs(ABI abi.ABI, HexMethod []byte) (*abi.Method, abi.Arguments
 func abiFromProtocolType(ProtocolType string) (ABI abi.ABI, err error) {
 	switch ProtocolType {
 	case "UniswapV2Router":
-		ABI, err = abi.JSON(strings.NewReader(router.RouterMetaData.ABI))
+		ABI, err = abi.JSON(strings.NewReader(uniV2Router.RouterMetaData.ABI))
 	case "UniswapV3Router":
-		ABI, err = abi.JSON(strings.NewReader(uniswapV3.UniswapV3MetaData.ABI))
+		ABI, err = abi.JSON(strings.NewReader(router.UniswapV3MetaData.ABI))
 	case "UniswapV2Pool":
-		ABI, err = abi.JSON(strings.NewReader(pool.PoolMetaData.ABI))
+		ABI, err = abi.JSON(strings.NewReader(uniV2Pool.PoolMetaData.ABI))
+	case "UniswapV3Pool":
+		ABI, err = abi.JSON(strings.NewReader(uniswapV3.Uniswapv3MetaData.ABI))
 	case "WETH":
 		ABI, err = abi.JSON(strings.NewReader(WETH.WETHMetaData.ABI))
 	default:
@@ -208,12 +250,11 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
 			Q.Type = Method.Name
-			Q.Amount = toFloat(Input[0].(*big.Int), decimalsIn)
-			Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
+			Q.Amount = floatToString(toFloat(Input[0].(*big.Int), decimalsIn))
+			Q.MinMax = floatToString(toFloat(Input[1].(*big.Int), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
 		}
-
 	case "swapTokensForExactTokens":
 		Path := Input[2].([]common.Address)
 		if len(Path) > 0 {
@@ -221,8 +262,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			decimals, _ := getDecimalsWithCache(Client, Path[0])
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Type = Method.Name
-			Q.Amount = toFloat(Input[0].(*big.Int), decimals)
-			Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
+			Q.Amount = floatToString(toFloat(Input[0].(*big.Int), decimals))
+			Q.MinMax = floatToString(toFloat(Input[1].(*big.Int), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
 		}
@@ -233,8 +274,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
 			Q.Type = Method.Name
-			Q.Amount = toFloat(Tx.Value(), decimals)
-			Q.MinMax = toFloat(Input[0].(*big.Int), decimalsOut)
+			Q.Amount = floatToString(toFloat(Tx.Value(), decimals))
+			Q.MinMax = floatToString(toFloat(Input[0].(*big.Int), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
 		}
@@ -245,12 +286,11 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
 			Q.Type = Method.Name
-			Q.Amount = toFloat(Input[0].(*big.Int), decimals)
-			Q.MinMax = toFloat(Tx.Value(), decimalsOut)
+			Q.Amount = floatToString(toFloat(Input[0].(*big.Int), decimals))
+			Q.MinMax = floatToString(toFloat(Tx.Value(), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
 		}
-
 	case "swapExactTokensForETH":
 		Path := Input[2].([]common.Address)
 		if len(Path) > 0 {
@@ -258,8 +298,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
 			Q.Type = Method.Name
-			Q.Amount = toFloat(Input[0].(*big.Int), decimals)
-			Q.MinMax = toFloat(Input[1].(*big.Int), decimalsOut)
+			Q.Amount = floatToString(toFloat(Input[0].(*big.Int), decimals))
+			Q.MinMax = floatToString(toFloat(Input[1].(*big.Int), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
 		}
@@ -270,8 +310,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
 			Q.Type = Method.Name
-			Q.Amount = toFloat(Input[0].(*big.Int), decimals)
-			Q.MinMax = toFloat(Tx.Value(), decimalsOut)
+			Q.Amount = floatToString(toFloat(Input[0].(*big.Int), decimals))
+			Q.MinMax = floatToString(toFloat(Tx.Value(), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
 		}
@@ -291,8 +331,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 		decimals, _ := getDecimalsWithCache(Client, Params.TokenIn)
 		decimalsOut, _ := getDecimalsWithCache(Client, Params.TokenOut)
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Params.AmountIn, decimals)
-		Q.MinMax = toFloat(Params.AmountOutMinimum, decimalsOut)
+		Q.Amount = floatToString(toFloat(Params.AmountIn, decimals))
+		Q.MinMax = floatToString(toFloat(Params.AmountOutMinimum, decimalsOut))
 		Q.TokenIn = Params.TokenIn.String()
 		Q.TokenOut = Params.TokenOut.String()
 	case "exactOutputSingle":
@@ -308,8 +348,10 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			SqrtPriceLimitX96 *big.Int       "json:\"sqrtPriceLimitX96\""
 		})
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Params.AmountOut, 18)
-		Q.MinMax = toFloat(Params.AmountInMaximum, 6)
+		decimals, _ := getDecimalsWithCache(Client, Params.TokenIn)
+		decimalsOut, _ := getDecimalsWithCache(Client, Params.TokenOut)
+		Q.Amount = floatToString(toFloat(Params.AmountOut, decimals))
+		Q.MinMax = floatToString(toFloat(Params.AmountInMaximum, decimalsOut))
 		Q.TokenIn = Params.TokenIn.String()
 		Q.TokenOut = Params.TokenOut.String()
 	case "exactInput":
@@ -322,8 +364,12 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			AmountOutMinimum *big.Int       "json:\"amountOutMinimum\""
 		})
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Params.AmountIn, 18)
-		Q.MinMax = toFloat(Params.AmountOutMinimum, 6)
+
+		decimals, _ := getDecimalsWithCache(Client, common.HexToAddress(hexutil.Encode(Params.Path[:20])))
+		decimalsOut, _ := getDecimalsWithCache(Client, common.HexToAddress(hexutil.Encode(Params.Path[len(Params.Path)-20:])))
+
+		Q.Amount = floatToString(toFloat(Params.AmountIn, decimals))
+		Q.MinMax = floatToString(toFloat(Params.AmountOutMinimum, decimalsOut))
 		Q.TokenIn = common.HexToAddress(hexutil.Encode(Params.Path[:20])).String()
 		Q.TokenOut = common.HexToAddress(hexutil.Encode(Params.Path[len(Params.Path)-20:])).String()
 	case "exactOutput":
@@ -336,8 +382,12 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			AmountInMaximum *big.Int       "json:\"amountInMaximum\""
 		})
 		Q.Type = Method.Name
-		Q.Amount = toFloat(Params.AmountOut, 18)
-		Q.MinMax = toFloat(Params.AmountInMaximum, 6)
+
+		decimals, _ := getDecimalsWithCache(Client, common.HexToAddress(hexutil.Encode(Params.Path[:20])))
+		decimalsOut, _ := getDecimalsWithCache(Client, common.HexToAddress(hexutil.Encode(Params.Path[len(Params.Path)-20:])))
+
+		Q.Amount = floatToString(toFloat(Params.AmountOut, decimals))
+		Q.MinMax = floatToString(toFloat(Params.AmountInMaximum, decimalsOut))
 		Q.TokenIn = common.HexToAddress(hexutil.Encode(Params.Path[:20])).String()
 		Q.TokenOut = common.HexToAddress(hexutil.Encode(Params.Path[len(Params.Path)-20:])).String()
 	default:
