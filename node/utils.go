@@ -9,7 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"io/ioutil"
 	"log"
 	"math"
 	"math/big"
@@ -111,44 +110,34 @@ func DisplayTokensAndDecimals() {
 }
 
 func SaveTokensToFile() error {
-	// Utilisez la méthode DatabaseCopy() pour obtenir une copie de la base de données
 	dbCopy := tokenDecimalsDB.DatabaseCopy()
-
-	// Convertissez la copie de la base de données en JSON
-	jsonData, err := json.Marshal(dbCopy)
+	file, err := os.OpenFile(config.TokenDBFileName, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
-
-	// Écrivez le JSON dans le fichier tokenDB.txt
-	err = ioutil.WriteFile(config.TokenDBFileName, jsonData, 0644)
-	if err != nil {
+	defer file.Close()
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(&dbCopy); err != nil {
 		return err
 	}
-
 	return nil
 }
 
 func LoadTokensFromFile() error {
-	// Vérifiez si le fichier tokenDB.txt existe
-	if _, err := os.Stat(config.TokenDBFileName); os.IsNotExist(err) {
-		return fmt.Errorf("file does not exist: %s", config.TokenDBFileName)
-	}
-
-	// Lisez le contenu du fichier tokenDB.txt
-	jsonData, err := ioutil.ReadFile(config.TokenDBFileName)
+	file, err := os.Open(config.TokenDBFileName)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("file does not exist: %s", config.TokenDBFileName)
+		}
 		return err
 	}
-
-	// Convertissez le contenu JSON en une map
+	defer file.Close()
 	var dbCopy map[string]int
-	err = json.Unmarshal(jsonData, &dbCopy)
-	if err != nil {
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&dbCopy); err != nil {
 		return err
 	}
 
-	// Parcourez la copie de la base de données et ajoutez chaque entrée à la base de données
 	for tokenAddress, decimals := range dbCopy {
 		tokenDecimalsDB.WriteTokenDecimals(tokenAddress, decimals)
 	}

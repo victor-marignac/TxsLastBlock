@@ -168,8 +168,20 @@ func (Tx *DecodedTx) ParseLogs() {
 
 			amountIn, amountOut := new(big.Int), new(big.Int)
 
-			if SwapUniV3Event.Amount0 != nil && SwapUniV3Event.Amount1 != nil {
-				amountIn.Add(SwapUniV3Event.Amount0, SwapUniV3Event.Amount1)
+			if SwapUniV3Event.Amount0.Sign() < 0 {
+				// Token0 est entrant, donc il est acheté
+				amountIn = new(big.Int).Neg(SwapUniV3Event.Amount0)
+			} else if SwapUniV3Event.Amount0.Sign() > 0 {
+				// Token0 est sortant, donc il est vendu
+				amountOut = SwapUniV3Event.Amount0
+			}
+
+			if SwapUniV3Event.Amount1.Sign() < 0 {
+				// Token1 est entrant, donc il est acheté
+				amountIn = new(big.Int).Neg(SwapUniV3Event.Amount1)
+			} else if SwapUniV3Event.Amount1.Sign() > 0 {
+				// Token1 est sortant, donc il est vendu
+				amountOut = SwapUniV3Event.Amount1
 			}
 
 			tokenInAddress := common.HexToAddress(Tx.Query.TokenIn)
@@ -245,8 +257,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 	switch Method.Name {
 	// Uniswap v2
 	case "swapExactTokensForTokens":
-		Path := Input[2].([]common.Address)
-		if len(Path) > 0 {
+		Path, ok := Input[2].([]common.Address)
+		if len(Path) > 0 && ok {
 			decimalsIn, _ := getDecimalsWithCache(Client, Path[0])
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
@@ -255,10 +267,12 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			Q.MinMax = floatToString(toFloat(Input[1].(*big.Int), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
+		} else {
+			log.Fatal("Erreur : Input[2] n'est pas []common.Address")
 		}
 	case "swapTokensForExactTokens":
-		Path := Input[2].([]common.Address)
-		if len(Path) > 0 {
+		Path, ok := Input[2].([]common.Address)
+		if len(Path) > 0 && ok {
 			Q.Protocol = "Uniswap V2"
 			decimals, _ := getDecimalsWithCache(Client, Path[0])
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
@@ -267,10 +281,12 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			Q.MinMax = floatToString(toFloat(Input[1].(*big.Int), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
+		} else {
+			log.Fatal("Erreur : Input[2] n'est pas []common.Address")
 		}
 	case "swapExactETHForTokens":
-		Path := Input[1].([]common.Address)
-		if len(Path) > 0 {
+		Path, ok := Input[1].([]common.Address)
+		if len(Path) > 0 && ok {
 			decimals, _ := getDecimalsWithCache(Client, Path[0])
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
@@ -279,10 +295,12 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			Q.MinMax = floatToString(toFloat(Input[0].(*big.Int), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
+		} else {
+			log.Fatal("Erreur : Input[1] n'est pas []common.Address")
 		}
 	case "swapTokensForExactETH":
-		Path := Input[1].([]common.Address)
-		if len(Path) > 0 {
+		Path, ok := Input[1].([]common.Address)
+		if len(Path) > 0 && ok {
 			decimals, _ := getDecimalsWithCache(Client, Path[0])
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
@@ -291,10 +309,12 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			Q.MinMax = floatToString(toFloat(Tx.Value(), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
+		} else {
+			log.Fatal("Erreur : Input[1] n'est pas []common.Address")
 		}
 	case "swapExactTokensForETH":
-		Path := Input[2].([]common.Address)
-		if len(Path) > 0 {
+		Path, ok := Input[2].([]common.Address)
+		if len(Path) > 0 && ok {
 			decimals, _ := getDecimalsWithCache(Client, Path[0])
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
@@ -303,10 +323,12 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			Q.MinMax = floatToString(toFloat(Input[1].(*big.Int), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
+		} else {
+			log.Fatal("Erreur : Input[2] n'est pas []common.Address")
 		}
 	case "swapETHForExactTokens":
-		Path := Input[1].([]common.Address)
-		if len(Path) > 0 {
+		Path, ok := Input[1].([]common.Address)
+		if len(Path) > 0 && ok {
 			decimals, _ := getDecimalsWithCache(Client, Path[0])
 			decimalsOut, _ := getDecimalsWithCache(Client, Path[len(Path)-1])
 			Q.Protocol = "Uniswap V2"
@@ -315,6 +337,8 @@ func ParseInputDataTransaction(Method abi.Method, Input []interface{}, Tx *types
 			Q.MinMax = floatToString(toFloat(Tx.Value(), decimalsOut))
 			Q.TokenIn = Path[0].String()
 			Q.TokenOut = Path[len(Path)-1].String()
+		} else {
+			log.Fatal("Erreur : Input[1] n'est pas []common.Address")
 		}
 	// Uniswap v3
 	case "exactInputSingle":
