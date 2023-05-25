@@ -5,7 +5,8 @@ import (
 	"../config"
 	"../uniswapV2/uniV2Pool"
 	"../uniswapV2/uniV2Router"
-	"../uniswapV3"
+	"../uniswapV3/uniV3Pool"
+	"../uniswapV3/uniV3Router"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -103,7 +104,8 @@ func (Tx *DecodedTx) ParseLogs() {
 	}
 
 	for _, l := range Tx.Tx.Logs {
-		var SwapEvent uniV2Pool.PoolSwap
+		var SwapUniV2Event uniV2Pool.PoolSwap
+		var SwapUniV3Event uniV3Pool.UniswapV3Swap
 		if len(l.Topics) == 0 {
 			log.Printf("Aucun topic trouvé dans les logs")
 			continue
@@ -120,7 +122,7 @@ func (Tx *DecodedTx) ParseLogs() {
 		// Ca veut dire que c'est un trade de 1700 USDC -> 1 WETH
 		switch l.Topics[0].Hex() {
 		case config.UniswapV2EventSwap:
-			err = AbiV2.UnpackIntoInterface(&SwapEvent, "Swap", l.Data)
+			err = AbiV2.UnpackIntoInterface(&SwapUniV2Event, "Swap", l.Data)
 			if err != nil {
 				log.Printf("Erreur lors de l'extraction des données de l'événement Swap: %v", err)
 				continue
@@ -128,12 +130,12 @@ func (Tx *DecodedTx) ParseLogs() {
 
 			amountIn, amountOut := new(big.Int), new(big.Int)
 
-			if SwapEvent.Amount0In != nil && SwapEvent.Amount1In != nil {
-				amountIn.Add(SwapEvent.Amount0In, SwapEvent.Amount1In)
+			if SwapUniV2Event.Amount0In != nil && SwapUniV2Event.Amount1In != nil {
+				amountIn.Add(SwapUniV2Event.Amount0In, SwapUniV2Event.Amount1In)
 			}
 
-			if SwapEvent.Amount0Out != nil && SwapEvent.Amount1Out != nil {
-				amountOut.Add(SwapEvent.Amount0Out, SwapEvent.Amount1Out)
+			if SwapUniV2Event.Amount0Out != nil && SwapUniV2Event.Amount1Out != nil {
+				amountOut.Add(SwapUniV2Event.Amount0Out, SwapUniV2Event.Amount1Out)
 			}
 
 			tokenInAddress := common.HexToAddress(Tx.Query.TokenIn)
@@ -153,22 +155,21 @@ func (Tx *DecodedTx) ParseLogs() {
 				AmountOut: floatToString(toFloat(amountOut, decimalsOut)),
 			})
 		case config.UniswapV3EventSwap:
-			err = AbiV3.UnpackIntoInterface(&SwapEventV3, "Swap", l.Data)
+			err = AbiV3.UnpackIntoInterface(&SwapUniV3Event, "Swap", l.Data)
 			if err != nil {
 				log.Printf("Erreur lors de l'extraction des données de l'événement Swap: %v", err)
 				continue
 			}
 
-			// Logic for Uniswap V3 swaps
-			// For example, assuming SwapEventV3 has Amount0, Amount1, TickLower and TickUpper fields
+			// Si Amount0 est un nombre positif, cela signifie que le token0 est sortant et le token1 entrant, La valeur absolue de Amount0 représente le montant du token0 qui est sorti lors de l'échange.
+			// Si Amount0 est un nombre négatif, cela signifie que le token0 est entrant et le token1 sortant, La valeur absolue de Amount0 représente le montant du token0 qui est entré lors de l'échange.
+			// Si Amount1 est un nombre positif, cela signifie que le token1 est sortant et le token0 entrant, La valeur absolue de Amount1 représente le montant du token1 qui est sorti lors de l'échange.
+			// Si Amount1 est un nombre négatif, cela signifie que le token1 est entrant et le token0 sortant, La valeur absolue de Amount1 représente le montant du token1 qui est entré lors de l'échange.
+
 			amountIn, amountOut := new(big.Int), new(big.Int)
 
-			if SwapEventV3.Amount0 != nil && SwapEventV3.Amount1 != nil {
-				amountIn.Add(SwapEventV3.Amount0, SwapEventV3.Amount1)
-			}
-
-			if SwapEventV3.Amount0 != nil && SwapEventV3.Amount1 != nil {
-				amountOut.Add(SwapEventV3.Amount0, SwapEventV3.Amount1)
+			if SwapUniV3Event.Amount0 != nil && SwapUniV3Event.Amount1 != nil {
+				amountIn.Add(SwapUniV3Event.Amount0, SwapUniV3Event.Amount1)
 			}
 
 			tokenInAddress := common.HexToAddress(Tx.Query.TokenIn)
@@ -226,11 +227,11 @@ func abiFromProtocolType(ProtocolType string) (ABI abi.ABI, err error) {
 	case "UniswapV2Router":
 		ABI, err = abi.JSON(strings.NewReader(uniV2Router.RouterMetaData.ABI))
 	case "UniswapV3Router":
-		ABI, err = abi.JSON(strings.NewReader(router.UniswapV3MetaData.ABI))
+		ABI, err = abi.JSON(strings.NewReader(uniV3Router.UniswapV3MetaData.ABI))
 	case "UniswapV2Pool":
 		ABI, err = abi.JSON(strings.NewReader(uniV2Pool.PoolMetaData.ABI))
 	case "UniswapV3Pool":
-		ABI, err = abi.JSON(strings.NewReader(uniswapV3.Uniswapv3MetaData.ABI))
+		ABI, err = abi.JSON(strings.NewReader(uniV3Pool.UniswapV3MetaData.ABI))
 	case "WETH":
 		ABI, err = abi.JSON(strings.NewReader(WETH.WETHMetaData.ABI))
 	default:

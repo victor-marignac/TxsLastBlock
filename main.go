@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"log"
+	"time"
 )
 
 // 0x15618650000000f0zef0zef0ezf0zefze1 = func UneFonction(UnArgument string)
@@ -56,16 +57,13 @@ func main() {
 	TxsFeed := ReadNewBlocks(Sub)
 	DecodedTxsFeed := make(chan node.DecodedTx, 500)
 	go node.TxDecoder(TxsFeed, DecodedTxsFeed)
-
+	go func() {
+		for {
+			time.Sleep(time.Minute * 1)
+			node.SaveTokensToFile()
+		}
+	}()
 	node.Sync.Wait()
-	Shutdown()
-}
-
-func Shutdown() {
-	log.Println("Shutting down gracefully..")
-	node.SaveTokensToFile()
-	// save db
-	// whatever..
 }
 
 func ReadNewBlocks(Sub chan *types.Header) chan node.LocalTx {

@@ -36,7 +36,7 @@ type LocalTxFees struct {
 
 type QueryData struct {
 	Protocol string `json:"Protocol"` // Uniswap v2
-	Contract string `json:"Contract"` // L'adresse du contrat du routeur Uniswap v2
+	Contract string `json:"Contract"` // L'adresse du contrat du routeur
 	Type     string `json:"Type"`     // SwapAmountIn / SwapAmountOut
 	TokenIn  string `json:"TokenIn"`  // Le token in
 	TokenOut string `json:"TokenOut"` // Le token out
@@ -48,11 +48,11 @@ type Event struct {
 	Protocol  string `json:"Protocol"`  // Uniswap v2
 	Contract  string `json:"Contract"`  // L'adresse du contrat du routeur Uniswap v2
 	Type      string `json:"Type"`      // Swap
-	Pool      string `json:"Pool"`      // L'adresse du uniV2Pool
+	Pool      string `json:"Pool"`      // L'adresse du pool
 	TokenIn   string `json:"TokenIn"`   // Le token in
 	TokenOut  string `json:"TokenOut"`  // Le token out
-	AmountIn  string `json:"AmountIn"`  // Le montant qui est arrivé dans le uniV2Pool
-	AmountOut string `json:"AmountOut"` // Le montant qui est sorti du uniV2Pool
+	AmountIn  string `json:"AmountIn"`  // Le montant qui est arrivé dans le pool
+	AmountOut string `json:"AmountOut"` // Le montant qui est sorti du pool
 }
 
 type DatabaseStruct struct {
